@@ -39,4 +39,29 @@ func main() {
 	if err != nil {
 		log.Fatal(err)
 	}
+
+	initDB()
+}
+
+func initDB() {
+	createStr := `CREATE TABLE IF NOT EXISTS todos(
+		id INT PRIMARY  KEY         NOT NULL,
+		text            TEXT        NOT NULL,
+		done            BOOLEAN     NOT NULL,
+	 );`
+
+	fmt.Println(createStr)
+
+	_, err := db.Exec(createStr)
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	insertStr := "INSERT INTO todos(id, text, done) VALUES (?, ?, ?)"
+	db.Exec(insertStr, 1, "Take out the trash", false)
+	db.Exec(insertStr, 2, "Do the dishes", false)
+	db.Exec(insertStr, 3, "Mop the floors", true)
+
+	row := db.QueryRow("SELECT * FROM todos WHERE id=3 LIMIT 1")
+	fmt.Println(row)
 }
