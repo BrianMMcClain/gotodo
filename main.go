@@ -4,6 +4,7 @@ import (
 	"database/sql"
 	"fmt"
 	"log"
+	"os"
 
 	_ "github.com/lib/pq"
 )
@@ -16,8 +17,6 @@ const (
 	dbname   = "gotodo"
 )
 
-var db *sql.DB
-
 var ToDo struct {
 	Id   int
 	Text string
@@ -25,6 +24,8 @@ var ToDo struct {
 }
 
 func main() {
+
+	// Connect to the database
 	connStr := fmt.Sprintf("host=%s port=%d user=%s password=%s dbname=%s sslmode=disable", host, port, user, password, dbname)
 	db, err := sql.Open("postgres", connStr)
 	if err != nil {
@@ -40,28 +41,26 @@ func main() {
 		log.Fatal(err)
 	}
 
-	initDB()
+	// If needed, reinit the database
+	if os.Getenv("INITDB") == "true" {
+		initDB(db)
+	}
+
 }
 
-func initDB() {
-	createStr := `CREATE TABLE IF NOT EXISTS todos(
-		id INT PRIMARY  KEY         NOT NULL,
-		text            TEXT        NOT NULL,
-		done            BOOLEAN     NOT NULL,
-	 );`
+func initDB(db *sql.DB) {
 
-	fmt.Println(createStr)
-
-	_, err := db.Exec(createStr)
+	// Recreate the table
+	db.Exec("DROP TABLE IF EXISTS todos;")
+	createTableQuery := "CREATE TABLE IF NOT EXISTS todos (id serial, text text, done BOOLEAN DEFAULT false, PRIMARY KEY (id));"
+	_, err := db.Exec(createTableQuery)
 	if err != nil {
 		log.Fatal(err)
 	}
 
-	insertStr := "INSERT INTO todos(id, text, done) VALUES (?, ?, ?)"
+	// Dummy data
+	insertStr := "INSERT INTO todos(id, text, done) VALUES ($1, $2, $3);"
 	db.Exec(insertStr, 1, "Take out the trash", false)
 	db.Exec(insertStr, 2, "Do the dishes", false)
 	db.Exec(insertStr, 3, "Mop the floors", true)
-
-	row := db.QueryRow("SELECT * FROM todos WHERE id=3 LIMIT 1")
-	fmt.Println(row)
 }
