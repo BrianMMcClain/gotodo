@@ -26,6 +26,45 @@ type ToDo struct {
 	Done bool
 }
 
+func GetToDos(db *sql.DB) gin.HandlerFunc {
+	fn := func(c *gin.Context) {
+		rows, err := db.Query("SELECT * FROM todos")
+		if err != nil {
+			log.Fatal(err)
+		}
+		defer rows.Close()
+
+		var todos []ToDo
+		for rows.Next() {
+			var todo ToDo
+			rows.Scan(&todo.Id, &todo.Text, &todo.Done)
+			todos = append(todos, todo)
+		}
+
+		c.Header("Access-Control-Allow-Origin", "*")
+		c.JSON(http.StatusOK, todos)
+	}
+
+	return gin.HandlerFunc(fn)
+}
+
+func GetToDo(db *sql.DB) gin.HandlerFunc {
+	fn := func(c *gin.Context) {
+		var todo ToDo
+		db.QueryRow("SELECT * FROM todos WHERE id=$1", c.Param("id")).Scan(&todo.Id, &todo.Text, &todo.Done)
+
+		c.Header("Access-Control-Allow-Origin", "*")
+
+		if todo.Id > 0 {
+			c.JSON(http.StatusOK, todo)
+		} else {
+			c.Status(http.StatusNotFound)
+		}
+	}
+
+	return gin.HandlerFunc(fn)
+}
+
 func main() {
 
 	// Connect to the database
@@ -52,29 +91,8 @@ func main() {
 	// Configure Gin
 	r := gin.Default()
 	r.GET("/", GetToDos(db))
+	r.GET("/:id", GetToDo(db))
 	r.Run(":8080")
-}
-
-func GetToDos(db *sql.DB) gin.HandlerFunc {
-	fn := func(c *gin.Context) {
-		rows, err := db.Query("SELECT * FROM todos")
-		if err != nil {
-			log.Fatal(err)
-		}
-		defer rows.Close()
-
-		var todos []ToDo
-		for rows.Next() {
-			var todo ToDo
-			rows.Scan(&todo.Id, &todo.Text, &todo.Done)
-			todos = append(todos, todo)
-		}
-
-		c.Header("Access-Control-Allow-Origin", "*")
-		c.JSON(http.StatusOK, todos)
-	}
-
-	return gin.HandlerFunc(fn)
 }
 
 func initDB(db *sql.DB) {
