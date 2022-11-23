@@ -84,7 +84,7 @@ func addToDo(db *sql.DB) gin.HandlerFunc {
 			log.Fatal(err)
 		}
 
-		c.String(http.StatusOK, fmt.Sprint(id))
+		c.String(http.StatusCreated, fmt.Sprint(id))
 	}
 
 	return gin.HandlerFunc(fn)
@@ -101,15 +101,41 @@ func updateToDo(db *sql.DB) gin.HandlerFunc {
 		json.Unmarshal(jsonData, &todo)
 
 		var insertError error
+		var res sql.Result
 		if len(todo.Text) > 0 {
 			queryString := "UPDATE todos SET text=$1, done=$2 WHERE id=$3"
-			_, insertError = db.Exec(queryString, todo.Text, todo.Done, c.Param("id"))
+			res, insertError = db.Exec(queryString, todo.Text, todo.Done, c.Param("id"))
 		} else {
 			queryString := "UPDATE todos SET done=$1 WHERE id=$2"
-			_, insertError = db.Exec(queryString, todo.Done, c.Param("id"))
+			res, insertError = db.Exec(queryString, todo.Done, c.Param("id"))
 		}
 
+		rowsAffected, _ := res.RowsAffected()
+
 		if insertError != nil {
+			log.Fatal(err)
+		}
+
+		if rowsAffected == 0 {
+			c.Status(http.StatusNotFound)
+		} else {
+			c.Status(http.StatusOK)
+		}
+	}
+
+	return gin.HandlerFunc(fn)
+}
+
+func deleteToDo(db *sql.DB) gin.HandlerFunc {
+	fn := func(c *gin.Context) {
+		deleteStatement := "DELETE FROM todos WHERE id=$1"
+		res, err := db.Exec(deleteStatement, c.Param("id"))
+		if err != nil {
+			log.Fatal(err)
+		}
+
+		rowsAffected, _ := res.RowsAffected()
+		if rowsAffected == 0 {
 			c.Status(http.StatusNotFound)
 		} else {
 			c.Status(http.StatusOK)
@@ -148,6 +174,7 @@ func main() {
 	r.GET("/:id", getToDo(db))
 	r.POST("/", addToDo(db))
 	r.POST("/:id", updateToDo(db))
+	r.DELETE("/:id", deleteToDo(db))
 	r.Run(":8080")
 }
 
