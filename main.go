@@ -2,7 +2,9 @@ package main
 
 import (
 	"database/sql"
+	"encoding/json"
 	"fmt"
+	"io/ioutil"
 	"log"
 	"net/http"
 	"os"
@@ -21,12 +23,12 @@ const (
 )
 
 type ToDo struct {
-	Id   int
-	Text string
-	Done bool
+	Id   int    `json:"id"`
+	Text string `json:"text"`
+	Done bool   `json:"done"`
 }
 
-func GetToDos(db *sql.DB) gin.HandlerFunc {
+func getToDos(db *sql.DB) gin.HandlerFunc {
 	fn := func(c *gin.Context) {
 		rows, err := db.Query("SELECT * FROM todos")
 		if err != nil {
@@ -48,7 +50,7 @@ func GetToDos(db *sql.DB) gin.HandlerFunc {
 	return gin.HandlerFunc(fn)
 }
 
-func GetToDo(db *sql.DB) gin.HandlerFunc {
+func getToDo(db *sql.DB) gin.HandlerFunc {
 	fn := func(c *gin.Context) {
 		var todo ToDo
 		db.QueryRow("SELECT * FROM todos WHERE id=$1", c.Param("id")).Scan(&todo.Id, &todo.Text, &todo.Done)
@@ -59,6 +61,58 @@ func GetToDo(db *sql.DB) gin.HandlerFunc {
 			c.JSON(http.StatusOK, todo)
 		} else {
 			c.Status(http.StatusNotFound)
+		}
+	}
+
+	return gin.HandlerFunc(fn)
+}
+
+func addToDo(db *sql.DB) gin.HandlerFunc {
+	fn := func(c *gin.Context) {
+		jsonData, err := ioutil.ReadAll(c.Request.Body)
+		if err != nil {
+			log.Fatal(err)
+		}
+
+		var todo ToDo
+		json.Unmarshal(jsonData, &todo)
+
+		queryString := "INSERT INTO todos(text, done) VALUES ($1, $2) RETURNING id"
+		var id int
+		db.QueryRow(queryString, todo.Text, todo.Done).Scan(&id)
+		if err != nil {
+			log.Fatal(err)
+		}
+
+		c.String(http.StatusOK, fmt.Sprint(id))
+	}
+
+	return gin.HandlerFunc(fn)
+}
+
+func updateToDo(db *sql.DB) gin.HandlerFunc {
+	fn := func(c *gin.Context) {
+		jsonData, err := ioutil.ReadAll(c.Request.Body)
+		if err != nil {
+			log.Fatal(err)
+		}
+
+		var todo ToDo
+		json.Unmarshal(jsonData, &todo)
+
+		var insertError error
+		if len(todo.Text) > 0 {
+			queryString := "UPDATE todos SET text=$1, done=$2 WHERE id=$3"
+			_, insertError = db.Exec(queryString, todo.Text, todo.Done, c.Param("id"))
+		} else {
+			queryString := "UPDATE todos SET done=$1 WHERE id=$2"
+			_, insertError = db.Exec(queryString, todo.Done, c.Param("id"))
+		}
+
+		if insertError != nil {
+			c.Status(http.StatusNotFound)
+		} else {
+			c.Status(http.StatusOK)
 		}
 	}
 
@@ -90,8 +144,10 @@ func main() {
 
 	// Configure Gin
 	r := gin.Default()
-	r.GET("/", GetToDos(db))
-	r.GET("/:id", GetToDo(db))
+	r.GET("/", getToDos(db))
+	r.GET("/:id", getToDo(db))
+	r.POST("/", addToDo(db))
+	r.POST("/:id", updateToDo(db))
 	r.Run(":8080")
 }
 
@@ -100,15 +156,15 @@ func initDB(db *sql.DB) {
 
 	// Recreate the table
 	db.Exec("DROP TABLE IF EXISTS todos;")
-	createTableQuery := "CREATE TABLE IF NOT EXISTS todos (id serial, text text, done BOOLEAN DEFAULT false, PRIMARY KEY (id));"
+	createTableQuery := "CREATE TABLE IF NOT EXISTS todos (id SERIAL PRIMARY KEY, text TEXT, done BOOLEAN DEFAULT false);"
 	_, err := db.Exec(createTableQuery)
 	if err != nil {
 		log.Fatal(err)
 	}
 
 	// Dummy data
-	insertStr := "INSERT INTO todos(id, text, done) VALUES ($1, $2, $3);"
-	db.Exec(insertStr, 1, "Take out the trash", false)
-	db.Exec(insertStr, 2, "Do the dishes", false)
-	db.Exec(insertStr, 3, "Mop the floors", true)
+	insertStr := "INSERT INTO todos(text, done) VALUES ($1, $2);"
+	db.Exec(insertStr, "Take out the trash", false)
+	db.Exec(insertStr, "Do the dishes", false)
+	db.Exec(insertStr, "Mop the floors", true)
 }
