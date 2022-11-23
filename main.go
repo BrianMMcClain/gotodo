@@ -3,6 +3,7 @@ package main
 import (
 	"database/sql"
 	"encoding/json"
+	"flag"
 	"fmt"
 	"io/ioutil"
 	"log"
@@ -12,14 +13,6 @@ import (
 	"github.com/gin-gonic/gin"
 
 	_ "github.com/lib/pq"
-)
-
-const (
-	host     = "localhost"
-	port     = 5432
-	user     = "user"
-	password = "pass"
-	dbname   = "gotodo"
 )
 
 type ToDo struct {
@@ -147,8 +140,16 @@ func deleteToDo(db *sql.DB) gin.HandlerFunc {
 
 func main() {
 
+	// Read in the config
+	configPath := flag.String("config", "./config.json", "Path to the JSON configuration file")
+	flag.Parse()
+	config, err := parseConfig(*configPath)
+	if err != nil {
+		log.Fatal(err)
+	}
+
 	// Connect to the database
-	connStr := fmt.Sprintf("host=%s port=%d user=%s password=%s dbname=%s sslmode=disable", host, port, user, password, dbname)
+	connStr := fmt.Sprintf("host=%s port=%d user=%s password=%s dbname=%s sslmode=disable", config.Host, config.Port, config.User, config.Password, config.DBName)
 	db, err := sql.Open("postgres", connStr)
 	if err != nil {
 		log.Fatal(err)
