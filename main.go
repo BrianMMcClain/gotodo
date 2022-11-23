@@ -4,7 +4,10 @@ import (
 	"database/sql"
 	"fmt"
 	"log"
+	"net/http"
 	"os"
+
+	"github.com/gin-gonic/gin"
 
 	_ "github.com/lib/pq"
 )
@@ -17,7 +20,7 @@ const (
 	dbname   = "gotodo"
 )
 
-var ToDo struct {
+type ToDo struct {
 	Id   int
 	Text string
 	Done bool
@@ -46,9 +49,36 @@ func main() {
 		initDB(db)
 	}
 
+	// Configure Gin
+	r := gin.Default()
+	r.GET("/", GetToDos(db))
+	r.Run(":8080")
+}
+
+func GetToDos(db *sql.DB) gin.HandlerFunc {
+	fn := func(c *gin.Context) {
+		rows, err := db.Query("SELECT * FROM todos")
+		if err != nil {
+			log.Fatal(err)
+		}
+		defer rows.Close()
+
+		var todos []ToDo
+		for rows.Next() {
+			var todo ToDo
+			rows.Scan(&todo.Id, &todo.Text, &todo.Done)
+			todos = append(todos, todo)
+		}
+
+		c.Header("Access-Control-Allow-Origin", "*")
+		c.JSON(http.StatusOK, todos)
+	}
+
+	return gin.HandlerFunc(fn)
 }
 
 func initDB(db *sql.DB) {
+	log.Printf("Initializing database . . .")
 
 	// Recreate the table
 	db.Exec("DROP TABLE IF EXISTS todos;")
